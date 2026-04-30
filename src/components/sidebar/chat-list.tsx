@@ -9,8 +9,10 @@ export const ChatList = () => {
 		data: any[];
 	}>({
 		queryKey: ['conversations'],
-		queryFn: () => difyApi.get('/conversations')
+		queryFn: () => difyApi.get('/conversations?limit=20&sort_by=-updated_at')
 	});
 
-	return <Box> {conversations?.data.map((el) => el)}</Box>;
+	return (
+		<Box sx={{ color: '#b5b5b5' }}> {conversations?.data.map((el) => el)}</Box>
+	);
 };

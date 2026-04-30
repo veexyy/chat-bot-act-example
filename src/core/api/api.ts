@@ -1,6 +1,5 @@
 import axios from 'axios';
-
-const API_KEY = import.meta.env.VITE_API_KEY;
+import { API_KEY } from '../../constants/imports';
 
 export const difyApi = axios.create({
 	baseURL: 'https://api.dify.ai/v1',
