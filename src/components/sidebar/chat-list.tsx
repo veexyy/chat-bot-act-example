@@ -3,7 +3,7 @@ import { difyApi } from '../../core/api/api';
 import { Box } from '@mui/material';
 
 export const ChatList = () => {
-	const { data: conversations, isLoading: loadingConversations } = useQuery<{
+	const { data: conversations } = useQuery<{
 		limit: string;
 		has_more: boolean;
 		data: any[];
