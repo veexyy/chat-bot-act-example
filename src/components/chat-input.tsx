@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Box, ButtonBase, InputAdornment, TextField } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import AddIcon from '@mui/icons-material/Add';
+import SquareRoundedIcon from '@mui/icons-material/SquareRounded';
 import { useStreamChat } from '../core/hooks/useStreamChat';
 
 export const ChatInput = () => {
 	const [inputValue, setInputValue] = useState('');
-	const { sendMessage, answer, isLoading } = useStreamChat();
+	const { sendMessage, answer, isLoading, stop, isBeginPrint } =
+		useStreamChat();
 
 	const handleSend = async () => {
 		if (!inputValue) return;
@@ -18,6 +20,7 @@ export const ChatInput = () => {
 	return (
 		<>
 			{/* 🔥 ВЫВОД СТРИМА */}
+			{isBeginPrint && <>думаю</>}
 			<Box
 				sx={{
 					color: 'white',
@@ -77,18 +80,32 @@ export const ChatInput = () => {
 					}}
 				/>
 
-				<ButtonBase
-					onClick={handleSend}
-					disabled={!inputValue || isLoading}
-					sx={{
-						bgcolor: inputValue ? '#fff' : '#454545',
-						borderRadius: '100%',
-						maxWidth: 36,
-						maxHeight: 36,
-						p: 2
-					}}>
-					<ArrowUpwardIcon />
-				</ButtonBase>
+				{!isLoading ? (
+					<ButtonBase
+						onClick={handleSend}
+						disabled={!inputValue || isLoading}
+						sx={{
+							bgcolor: inputValue ? '#fff' : '#454545',
+							borderRadius: '100%',
+							maxWidth: 36,
+							maxHeight: 36,
+							p: 2
+						}}>
+						<ArrowUpwardIcon />
+					</ButtonBase>
+				) : (
+					<ButtonBase
+						sx={{
+							bgcolor: inputValue ? '#fff' : '#454545',
+							borderRadius: '100%',
+							maxWidth: 36,
+							maxHeight: 36,
+							p: 2
+						}}
+						onClick={stop}>
+						<SquareRoundedIcon />
+					</ButtonBase>
+				)}
 			</Box>
 		</>
 	);

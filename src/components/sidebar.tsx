@@ -2,8 +2,10 @@ import { ChatList } from './sidebar/chat-list';
 import { Box } from '@mui/material';
 import { BottomPanel } from './sidebar/bottom-panel';
 import { SidebarHeader } from './sidebar/sidebar-header';
+import { useState } from 'react';
 
 export const Sidebar = () => {
+	const [isOpenSidebar, setIsOpenSidebar] = useState<boolean>(true);
 	return (
 		<Box
 			sx={{
@@ -15,11 +17,14 @@ export const Sidebar = () => {
 				display: 'flex',
 				flexDirection: 'column',
 				overflow: 'auto',
-				maxWidth: '250px',
+				maxWidth: isOpenSidebar ? '250px' : '52px',
 				textOverflow: 'clip',
 				overflowX: 'hidden'
 			}}>
-			<SidebarHeader />
+			<SidebarHeader
+				isOpenSidebar={isOpenSidebar}
+				setIsOpenSidebar={setIsOpenSidebar}
+			/>
 			<ChatList />
 			<BottomPanel />
 		</Box>
