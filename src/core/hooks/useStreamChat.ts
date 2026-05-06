@@ -1,11 +1,19 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { API_KEY, USER_ID } from '../../constants/imports';
-import { useNavigate } from 'react-router';
-import { useStream } from '../providers/streamProvider/useStream';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { difyApi } from '../api/api';
+import { useParams } from 'react-router';
+
+type Message = {
+	id: string;
+	role: 'user' | 'assistant';
+	content: string;
+	status?: 'loading' | 'done';
+};
 
 export const useStreamChat = () => {
-	const { setConversationId, conversationId } = useStream();
-	const [answer, setAnswer] = useState('');
+	const [localMessages, setLocalMessages] = useState<Message[]>([]);
+	const { chatId } = useParams();
 	const [isLoading, setIsLoading] = useState(false);
 	const [parsedAnswer, setParsedAnswer] = useState<any>(null);
 	// состояние для отслеживания начала печати
@@ -13,12 +21,17 @@ export const useStreamChat = () => {
 
 	const controllerRef = useRef<AbortController | null>(null);
 	const isStoppedRef = useRef(false);
+	const appendToMessage = (id: string, text: string) => {
+		setLocalMessages((prev) =>
+			prev.map((msg) =>
+				msg.id === id ? { ...msg, content: msg.content + text } : msg
+			)
+		);
+	};
 
 	// 🧠 очередь токенов
 	const queueRef = useRef<string[]>([]);
 	const isPrintingRef = useRef(false);
-
-	const nav = useNavigate();
 
 	const getDelay = (char: string) => {
 		const queueLength = queueRef.current.length;
@@ -34,7 +47,7 @@ export const useStreamChat = () => {
 		return baseDelay;
 	};
 
-	const startPrinting = () => {
+	const startPrinting = (messageId: string) => {
 		if (isPrintingRef.current) return;
 
 		isPrintingRef.current = true;
@@ -49,9 +62,8 @@ export const useStreamChat = () => {
 			const next = queueRef.current.shift();
 
 			if (next) {
-				setAnswer((prev) => prev + next);
-
-				setTimeout(() => print(), getDelay(next));
+				appendToMessage(messageId, next);
+				setTimeout(print, getDelay(next));
 			} else {
 				isPrintingRef.current = false;
 			}
@@ -60,27 +72,87 @@ export const useStreamChat = () => {
 		print();
 	};
 
-	const getConversationMessages = async () => {
-		const res = await fetch('https://api.dify.ai/v1/messages', {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${API_KEY}`,
-				'Content-Type': 'application/json'
+	const useGetMessages = (conversationId: string) => {
+		return useQuery({
+			queryKey: ['messages', conversationId],
+			queryFn: async () => {
+				const res = await difyApi.get(
+					`/messages?conversation_id=${conversationId}&user=${USER_ID}&limit=20`
+				);
+				return res.data;
 			},
-			body: JSON.stringify({
-				conversation_id: conversationId,
-				user: USER_ID
-			})
+			enabled: !!conversationId
 		});
-		return res.body;
 	};
 
+	const { data } = useGetMessages(chatId ?? '');
+
+	const queryClient = useQueryClient();
+
+	const serverMessages: Message[] = useMemo(() => {
+		if (!data) return [];
+
+		return data.flatMap((el: any) => {
+			const arr: Message[] = [];
+
+			if (el.query) {
+				arr.push({
+					id: `server-user-${el.id}`,
+					role: 'user',
+					content: el.query,
+					status: 'done'
+				});
+			}
+
+			if (el.answer) {
+				arr.push({
+					id: `server-bot-${el.id}`,
+					role: 'assistant',
+					content: el.answer,
+					status: 'done'
+				});
+			}
+
+			return arr;
+		});
+	}, [data]);
+
+	const messages = useMemo(() => {
+		const map = new Map<string, Message>();
+
+		// 1. сервер
+		serverMessages.forEach((m) => map.set(m.id, m));
+
+		// 2. локальные (перекрывают)
+		localMessages.forEach((m) => map.set(m.id, m));
+
+		return Array.from(map.values());
+	}, [serverMessages, localMessages]);
+
 	const sendMessage = async (message: string) => {
-		setAnswer('');
 		setIsLoading(true);
 		setIsBeginPrint(false);
 		isStoppedRef.current = false;
 		queueRef.current = [];
+
+		// 👉 1. добавляем сообщение юзера
+		const userMessage: Message = {
+			id: crypto.randomUUID(),
+			role: 'user',
+			content: message
+		};
+
+		// 👉 2. создаем пустое сообщение бота
+		const botMessageId = crypto.randomUUID();
+
+		const botMessage: Message = {
+			id: botMessageId,
+			role: 'assistant',
+			content: '',
+			status: 'loading'
+		};
+
+		setLocalMessages((prev) => [...prev, userMessage, botMessage]);
 
 		const controller = new AbortController();
 		controllerRef.current = controller;
@@ -96,7 +168,7 @@ export const useStreamChat = () => {
 				inputs: {},
 				user: USER_ID,
 				response_mode: 'streaming',
-				conversation_id: conversationId
+				conversation_id: chatId
 			}),
 			signal: controller.signal
 		});
@@ -113,30 +185,39 @@ export const useStreamChat = () => {
 			}
 
 			const { done, value } = await reader.read();
-			
 			if (done) break;
 
 			buffer += decoder.decode(value, { stream: true });
 
 			const lines = buffer.split('\n');
-			buffer = lines.pop() || '';			
+			buffer = lines.pop() || '';
 
 			for (const line of lines) {
 				if (isStoppedRef.current) continue;
 
 				if (line.startsWith('data:')) {
 					const json = line.replace('data: ', '').trim();
-					const parsed = JSON.parse(json);
 
 					if (json === '[DONE]') {
 						setIsLoading(false);
+						queryClient.invalidateQueries({
+							queryKey: ['messages', chatId]
+						});
+
+						// 👉 помечаем сообщение как завершенное
+						setLocalMessages((prev) =>
+							prev.map((m) =>
+								m.id === botMessageId ? { ...m, status: 'done' } : m
+							)
+						);
+
 						return;
 					}
 
 					try {
-						if (parsed) {
-							setParsedAnswer(parsed);
-						}
+						const parsed = JSON.parse(json);
+
+						setParsedAnswer(parsed);
 
 						if (parsed.event === 'workflow_started') {
 							setIsBeginPrint(true);
@@ -147,7 +228,7 @@ export const useStreamChat = () => {
 						if (parsed.answer) {
 							const chars = parsed.answer.split('');
 							queueRef.current.push(...chars);
-							startPrinting();
+							startPrinting(botMessageId);
 						}
 					} catch (e) {
 						console.error('parse error', e);
@@ -155,11 +236,9 @@ export const useStreamChat = () => {
 				}
 			}
 		}
-		
 
 		setIsLoading(false);
 	};
-
 	const stop = async () => {
 		isStoppedRef.current = true;
 
@@ -181,16 +260,19 @@ export const useStreamChat = () => {
 				}
 			);
 		}
-
+		queryClient.invalidateQueries({
+			queryKey: ['messages', chatId]
+		});
 		setIsLoading(false);
 	};
+	console.log(messages, 'in hook');
 
 	return {
 		sendMessage,
 		stop,
-		answer,
+		messages,
 		isLoading,
 		isBeginPrint,
-		getConversationMessages
+		useGetMessages
 	};
 };

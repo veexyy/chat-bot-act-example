@@ -3,7 +3,7 @@ import { Outlet } from 'react-router';
 
 export const Layout = () => {
 	return (
-		<Box sx={{ bgcolor: '#212121', minHeight: '100vh', overflow: 'hidden' }}>
+		<Box sx={{ bgcolor: '#212121', minHeight: '100vh' }}>
 			<Outlet />
 		</Box>
 	);

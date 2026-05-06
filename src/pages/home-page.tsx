@@ -1,7 +1,9 @@
 import { Box, Typography } from '@mui/material';
 import { ChatInput } from '../components/chat-input';
+import { useStreamChat } from '../core/hooks/useStreamChat';
 
 export const HomePage = () => {
+	const { isLoading, sendMessage } = useStreamChat();
 	return (
 		<Box
 			sx={{
@@ -14,7 +16,10 @@ export const HomePage = () => {
 			<Typography sx={{ fontSize: 24, color: 'white', mb: 4 }}>
 				Введите запрос
 			</Typography>
-			<ChatInput />
+			<ChatInput
+				isLoading={isLoading}
+				sendMessage={sendMessage}
+			/>
 			<Box sx={{ flex: 1.5 }} />{' '}
 			{/* нижний отступ больше → центр смещается вверх */}
 		</Box>

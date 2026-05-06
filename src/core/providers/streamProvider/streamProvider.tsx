@@ -7,20 +7,20 @@ import {
 } from 'react';
 
 export interface IStreamContext {
-	conversationId: string;
-	setConversationId: Dispatch<SetStateAction<string>>;
+	inputValue: string;
+	setInputValue: Dispatch<SetStateAction<string>>;
 }
 
 export const StreamContext = createContext<IStreamContext | null>(null);
 
 export const StreamProvider = ({ children }: { children: ReactNode }) => {
-	const [conversationId, setConversationId] = useState<string>('');
+	const [inputValue, setInputValue] = useState('');
 
 	return (
 		<StreamContext.Provider
 			value={{
-				conversationId,
-				setConversationId
+				inputValue,
+				setInputValue
 			}}>
 			{children}
 		</StreamContext.Provider>

@@ -1,14 +1,17 @@
-import { useState } from 'react';
 import { Box, ButtonBase, InputAdornment, TextField } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import AddIcon from '@mui/icons-material/Add';
 import SquareRoundedIcon from '@mui/icons-material/SquareRounded';
-import { useStreamChat } from '../core/hooks/useStreamChat';
+import { useStream } from '../core/providers/streamProvider/useStream';
 
-export const ChatInput = () => {
-	const [inputValue, setInputValue] = useState('');
-	const { sendMessage, answer, isLoading, stop, isBeginPrint } =
-		useStreamChat();
+export const ChatInput = ({
+	sendMessage,
+	isLoading
+}: {
+	sendMessage: any;
+	isLoading: boolean;
+}) => {
+	const { inputValue, setInputValue } = useStream();
 
 	const handleSend = async () => {
 		if (!inputValue) return;
@@ -19,17 +22,6 @@ export const ChatInput = () => {
 
 	return (
 		<>
-			{/* 🔥 ВЫВОД СТРИМА */}
-			{isBeginPrint && <>думаю</>}
-			<Box
-				sx={{
-					color: 'white',
-					mb: 2,
-					whiteSpace: 'pre-wrap'
-				}}>
-				{answer}
-			</Box>
-
 			<Box
 				sx={{
 					display: 'flex',
