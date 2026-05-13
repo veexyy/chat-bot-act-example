@@ -33,7 +33,6 @@ export const useStreamChat = () => {
 
 		return data.flatMap((el: any) => {
 			const arr: Message[] = [];
-			console.log(el);
 
 			if (el.query) {
 				arr.push({

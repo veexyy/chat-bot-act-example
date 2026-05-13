@@ -117,20 +117,36 @@ export const ChatList = () => {
 						sx={{
 							display: 'flex',
 							justifyContent: 'space-between',
+							alignItems: 'center',
 							p: 1,
 							py: 1.5,
-							borderBottom: '1px solid #333'
+							borderBottom: '1px solid #333',
+							minWidth: 0
 						}}>
 						<Link
-							style={{ textDecoration: 'none' }}
+							style={{
+								textDecoration: 'none',
+								flex: 1,
+								minWidth: 0
+							}}
 							to={`/chat/${conversation?.id}`}>
-							<Typography sx={{ color: '#fff', fontSize: 14 }}>
+							<Typography
+								sx={{
+									color: '#fff',
+									fontSize: 14,
+									overflow: 'hidden',
+									textOverflow: 'ellipsis',
+									whiteSpace: 'nowrap'
+								}}>
 								{conversation?.name}
 							</Typography>
 						</Link>
 
 						<Box
-							sx={{ cursor: 'pointer' }}
+							sx={{
+								cursor: 'pointer',
+								flexShrink: 0
+							}}
 							onClick={() => deleteConversation(conversation?.id)}>
 							удалить
 						</Box>

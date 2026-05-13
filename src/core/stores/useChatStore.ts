@@ -1,6 +1,7 @@
 // stores/chatStore.ts
 import { create } from 'zustand';
 import { API_KEY, USER_ID } from '../../constants/imports';
+import { formatMarkdown } from '../utils/formatMarkdown';
 
 export type Message = {
 	id: string;
@@ -23,6 +24,10 @@ interface ChatStore {
 	currentStreamingMessageId: string | null;
 	streamingAssistantMessage: Message | null;
 	setPendingUserMessage: (message: Message | null) => void;
+	file: File | null;
+	setFile: (v: File | null) => void;
+	uploadedFileData: any;
+	setUploadedFileData: (v: any) => void;
 
 	setStreamingAssistantMessage: (message: Message | null) => void;
 
@@ -61,6 +66,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	parsedAnswer: null,
 	isBeginPrint: false,
 	currentStreamingMessageId: null,
+	file: null,
+	setFile: (file) => set({ file }),
 
 	// Refs как часть стора
 	controller: null,
@@ -68,6 +75,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	queue: [],
 	isPrinting: false,
 	activeBotMessageId: null,
+	uploadedFileData: null,
+	setUploadedFileData: (v) => set({ uploadedFileData: v }),
 
 	setIsLoading: (loading) => set({ isLoading: loading }),
 	setParsedAnswer: (answer) => set({ parsedAnswer: answer }),
@@ -83,14 +92,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 		}),
 
 	appendToStreamingMessage: (text) =>
-		set((state) => ({
-			streamingAssistantMessage: state.streamingAssistantMessage
-				? {
-						...state.streamingAssistantMessage,
-						content: state.streamingAssistantMessage.content + text
-					}
-				: null
-		})),
+		set((state) => {
+			if (!state.streamingAssistantMessage) {
+				return { streamingAssistantMessage: null };
+			}
+
+			const raw = state.streamingAssistantMessage.content + text;
+
+			return {
+				streamingAssistantMessage: {
+					...state.streamingAssistantMessage,
+					content: formatMarkdown(raw)
+				}
+			};
+		}),
 	getDelay: (char: string) => {
 		const { queue } = get();
 		let baseDelay = 10;
@@ -156,7 +171,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	): Promise<string | null> => {
 		let conversationId: string | null = null;
 		const state = get();
+		function detectFileType(file: File | null) {
+			if (!file) return;
+			// Сначала проверяем MIME тип
+			if (file.type) {
+				if (file.type.startsWith('image/')) return 'image';
+				if (file.type.startsWith('video/')) return 'video';
+				if (file.type.startsWith('audio/')) return 'audio';
+				if (
+					file.type === 'application/pdf' ||
+					file.type.includes('word') ||
+					file.type.includes('document')
+				) {
+					return 'document';
+				}
+			}
 
+			// Если MIME не помог, проверяем по расширению
+			const ext = file?.name?.split('.')?.pop()?.toLowerCase();
+			const docExts = ['pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'];
+			if (!ext) return;
+			if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return 'image';
+			if (['mp4', 'avi', 'mov'].includes(ext)) return 'video';
+			if (['mp3', 'wav', 'ogg'].includes(ext)) return 'audio';
+			if (docExts.includes(ext)) return 'document';
+
+			return 'custom';
+		}
 		// Останавливаем предыдущий стрим если есть
 		if (state.controller) {
 			state.controller.abort();
@@ -206,7 +247,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 					inputs: {},
 					user: USER_ID,
 					response_mode: 'streaming',
-					conversation_id: chatId
+					conversation_id: chatId,
+					files: [
+						{
+							type: detectFileType(state.file),
+							upload_file_id: state.uploadedFileData?.id,
+							transfer_method: 'local_file'
+						}
+					]
 				}),
 				signal: controller.signal
 			});
@@ -263,9 +311,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 							}
 
 							if (parsed.answer) {
-								const chars = parsed.answer.split('');
 								const currentState = get();
-								const newQueue = [...currentState.queue, ...chars];
+								const newQueue = [...currentState.queue, parsed.answer];
 								set({
 									queue: newQueue
 								});
