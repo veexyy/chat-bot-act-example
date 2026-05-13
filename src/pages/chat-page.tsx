@@ -44,7 +44,8 @@ export const ChatPage = () => {
 								borderRadius: 2,
 								bgcolor: msg.role === 'user' ? '#313131' : '#1e1e1e',
 								color: 'white',
-								maxWidth: '80%'
+								maxWidth: '80%',
+								fontFamily: 'math'
 							}}>
 							{msg.content || (msg.status === 'loading' && '...')}
 						</Box>

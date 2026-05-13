@@ -2,10 +2,10 @@ import { ChatList } from './sidebar/chat-list';
 import { Box } from '@mui/material';
 import { BottomPanel } from './sidebar/bottom-panel';
 import { SidebarHeader } from './sidebar/sidebar-header';
-import { useState } from 'react';
+import { useStream } from '../core/providers/streamProvider/useStream';
 
 export const Sidebar = () => {
-	const [isOpenSidebar, setIsOpenSidebar] = useState<boolean>(true);
+	const { isOpenSidebar } = useStream();
 	return (
 		<Box
 			sx={{
@@ -21,10 +21,7 @@ export const Sidebar = () => {
 				textOverflow: 'clip',
 				overflowX: 'hidden'
 			}}>
-			<SidebarHeader
-				isOpenSidebar={isOpenSidebar}
-				setIsOpenSidebar={setIsOpenSidebar}
-			/>
+			<SidebarHeader />
 			<ChatList />
 			<BottomPanel />
 		</Box>

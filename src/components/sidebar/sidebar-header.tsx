@@ -1,14 +1,9 @@
 import { Box, ButtonBase } from '@mui/material';
 import { Link } from 'react-router';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
+import { useStream } from '../../core/providers/streamProvider/useStream';
 
-export const SidebarHeader = ({
-	isOpenSidebar,
-	setIsOpenSidebar
-}: {
-	isOpenSidebar: boolean;
-	setIsOpenSidebar: (v: boolean) => void;
-}) => {
+export const SidebarHeader = () => {
 	const iconButtonSx = {
 		display: 'flex',
 		alignItems: 'center',
@@ -39,6 +34,8 @@ export const SidebarHeader = ({
 			outline: '2px solid #888'
 		}
 	};
+	const { isOpenSidebar, setIsOpenSidebar } = useStream();
+
 	return (
 		<Box
 			sx={{

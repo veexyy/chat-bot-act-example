@@ -4,10 +4,12 @@ import { Box, Typography } from '@mui/material';
 import { USER_ID } from '../../constants/imports';
 import { Link } from 'react-router';
 import { queryClient } from '../../constants/queryClient';
+import { useStream } from '../../core/providers/streamProvider/useStream';
 
 const LIMIT = 20;
 
 export const ChatList = () => {
+	const { isOpenSidebar } = useStream();
 	const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
 		useInfiniteQuery<any>({
 			queryKey: ['conversations'],
@@ -25,7 +27,6 @@ export const ChatList = () => {
 				if (!lastPage?.has_more) return undefined;
 
 				const lastItem = lastPage.data.at(-1);
-				console.log(lastItem);
 
 				return lastItem?.id;
 			}
@@ -109,31 +110,35 @@ export const ChatList = () => {
 					fetchNextPage();
 				}
 			}}>
-			{conversations?.map((conversation) => (
-				<Box
-					key={conversation?.id}
-					sx={{
-						display: 'flex',
-						justifyContent: 'space-between',
-						p: 1,
-						py: 1.5,
-						borderBottom: '1px solid #333'
-					}}>
-					<Link
-						style={{ textDecoration: 'none' }}
-						to={`/chat/${conversation?.id}`}>
-						<Typography sx={{ color: '#fff', fontSize: 14 }}>
-							{conversation?.name}
-						</Typography>
-					</Link>
-
+			{isOpenSidebar ? (
+				conversations?.map((conversation) => (
 					<Box
-						sx={{ cursor: 'pointer' }}
-						onClick={() => deleteConversation(conversation?.id)}>
-						удалить
+						key={conversation?.id}
+						sx={{
+							display: 'flex',
+							justifyContent: 'space-between',
+							p: 1,
+							py: 1.5,
+							borderBottom: '1px solid #333'
+						}}>
+						<Link
+							style={{ textDecoration: 'none' }}
+							to={`/chat/${conversation?.id}`}>
+							<Typography sx={{ color: '#fff', fontSize: 14 }}>
+								{conversation?.name}
+							</Typography>
+						</Link>
+
+						<Box
+							sx={{ cursor: 'pointer' }}
+							onClick={() => deleteConversation(conversation?.id)}>
+							удалить
+						</Box>
 					</Box>
-				</Box>
-			))}
+				))
+			) : (
+				<></>
+			)}
 
 			{isFetchingNextPage && (
 				<Typography sx={{ p: 2, textAlign: 'center' }}>Загрузка...</Typography>

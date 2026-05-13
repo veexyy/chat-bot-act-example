@@ -3,6 +3,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import AddIcon from '@mui/icons-material/Add';
 import SquareRoundedIcon from '@mui/icons-material/SquareRounded';
 import { useStream } from '../core/providers/streamProvider/useStream';
+import { useStreamChat } from '../core/hooks/useStreamChat';
 
 export const ChatInput = ({
 	sendMessage,
@@ -12,11 +13,12 @@ export const ChatInput = ({
 	isLoading: boolean;
 }) => {
 	const { inputValue, setInputValue } = useStream();
+	const { stop } = useStreamChat();
 
-	const handleSend = async () => {
-		if (!inputValue) return;
+	const handleSend = () => {
+		if (!inputValue || isLoading) return;
 
-		await sendMessage(inputValue);
+		sendMessage(inputValue);
 		setInputValue('');
 	};
 
