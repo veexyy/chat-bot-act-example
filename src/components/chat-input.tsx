@@ -63,6 +63,7 @@ export const ChatInput = ({ sendMessage }: { sendMessage: any }) => {
 			setUploadedFileData(data);
 		}
 	});
+	console.log(uploadedFileData);
 
 	return (
 		<>
