@@ -11,7 +11,7 @@ export const Protected = () => {
 			</Box>
 			<Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
 				<Header />
-				<Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
+				<Box sx={{ flexGrow: 1, overflow: 'auto' }}>
 					<Outlet />
 				</Box>
 			</Box>

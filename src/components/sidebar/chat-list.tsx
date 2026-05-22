@@ -66,11 +66,6 @@ export const ChatList = () => {
 			if (context?.previousData) {
 				queryClient.setQueryData(['conversations'], context.previousData);
 			}
-		},
-
-		onSettled: () => {
-			// можно мягко перефетчить (не обязательно)
-			queryClient.invalidateQueries({ queryKey: ['conversations'] });
 		}
 	});
 

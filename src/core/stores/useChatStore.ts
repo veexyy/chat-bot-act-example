@@ -1,14 +1,13 @@
 // stores/chatStore.ts
 import { create } from 'zustand';
 import { API_KEY, USER_ID } from '../../constants/imports';
-import { formatMarkdown } from '../utils/formatMarkdown';
 
 export type Message = {
-	id: string;
-	role: 'user' | 'assistant';
-	content: string;
-	status?: 'loading' | 'done';
-	serverMessageId?: string;
+	id: string; // local id
+	serverId?: string; // message_id от Dify
+	status: 'streaming' | 'done';
+	chatId: string;
+	answer: string;
 };
 
 type ParsedAnswer = {
@@ -20,18 +19,16 @@ type ParsedAnswer = {
 
 interface ChatStore {
 	// Состояния
-	pendingUserMessage: Message | null;
-	currentStreamingMessageId: string | null;
 	streamingAssistantMessage: Message | null;
-	setPendingUserMessage: (message: Message | null) => void;
 	file: File | null;
 	setFile: (v: File | null) => void;
 	uploadedFileData: any;
 	setUploadedFileData: (v: any) => void;
+	currentStreamingMessageId: string | null;
+	migrateDraftChat: (newChatId: string) => void;
 
 	setStreamingAssistantMessage: (message: Message | null) => void;
 
-	appendToStreamingMessage: (text: string) => void;
 	isLoading: boolean;
 	parsedAnswer: ParsedAnswer;
 	isBeginPrint: boolean;
@@ -39,29 +36,56 @@ interface ChatStore {
 	// Refs для стрима (будут жить в сторе)
 	controller: AbortController | null;
 	isStopped: boolean;
-	queue: string[];
-	isPrinting: boolean;
-	isStreamFinished: boolean;
-	activeBotMessageId: string | null;
 
 	setIsLoading: (loading: boolean) => void;
 	setParsedAnswer: (answer: ParsedAnswer) => void;
 	setIsBeginPrint: (beginPrint: boolean) => void;
 
 	// Управление стримом
-	startStream: (message: string, chatId: string) => Promise<string | null>;
+	startStream: (
+		message: string,
+		chatId: string,
+		onConversationCreated?: (id: string) => void
+	) => Promise<void>;
 	stopStream: (chatId: string) => Promise<void>;
 	resetStreamState: () => void;
+	streamingMessagesByChat: Record<string, Message[]>;
 
-	// Внутренние методы для печати
-	startPrinting: () => void;
-	getDelay: (char: string) => number;
+	setMessages: (chatId: string, fn: (prev: Message[]) => Message[]) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
-	pendingUserMessage: null,
 	streamingAssistantMessage: null,
-	isStreamFinished: false,
+	streamingMessagesByChat: {},
+
+	setMessages: (chatId, fn) =>
+		set((state) => ({
+			streamingMessagesByChat: {
+				...state.streamingMessagesByChat,
+
+				[chatId]: fn(state.streamingMessagesByChat[chatId] ?? [])
+			}
+		})),
+	migrateDraftChat: (newChatId: string) => {
+		set((state) => {
+			// Забираем сообщения, которые стримились в пустом чате
+			const draftMessages = state.streamingMessagesByChat[''] ?? [];
+
+			// Обновляем у них chatId внутри объектов, чтобы они соответствовали новому урлу
+			const updatedMessages = draftMessages.map((m) => ({
+				...m,
+				chatId: newChatId
+			}));
+
+			return {
+				streamingMessagesByChat: {
+					...state.streamingMessagesByChat,
+					'': [], // Очищаем временный ключ, чтобы не было дублей
+					[newChatId]: updatedMessages // Переносим в постоянный ключ чата
+				}
+			};
+		});
+	},
 	isLoading: false,
 	parsedAnswer: null,
 	isBeginPrint: false,
@@ -72,168 +96,66 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 	// Refs как часть стора
 	controller: null,
 	isStopped: false,
-	queue: [],
-	isPrinting: false,
-	activeBotMessageId: null,
 	uploadedFileData: null,
 	setUploadedFileData: (v) => set({ uploadedFileData: v }),
 
 	setIsLoading: (loading) => set({ isLoading: loading }),
 	setParsedAnswer: (answer) => set({ parsedAnswer: answer }),
 	setIsBeginPrint: (beginPrint) => set({ isBeginPrint: beginPrint }),
-	setPendingUserMessage: (message) =>
-		set({
-			pendingUserMessage: message
-		}),
 
 	setStreamingAssistantMessage: (message) =>
 		set({
 			streamingAssistantMessage: message
 		}),
 
-	appendToStreamingMessage: (text) =>
-		set((state) => {
-			if (!state.streamingAssistantMessage) {
-				return { streamingAssistantMessage: null };
-			}
-
-			const raw = state.streamingAssistantMessage.content + text;
-
-			return {
-				streamingAssistantMessage: {
-					...state.streamingAssistantMessage,
-					content: formatMarkdown(raw)
-				}
-			};
-		}),
-	getDelay: (char: string) => {
-		const { queue } = get();
-		let baseDelay = 10;
-
-		if (queue.length > 300) baseDelay = 5;
-		if (queue.length > 800) baseDelay = 2;
-
-		if (['.', '!', '?'].includes(char)) return baseDelay * 3;
-		if ([',', ';'].includes(char)) return baseDelay * 2;
-
-		return baseDelay;
-	},
-
-	startPrinting: () => {
-		const state = get();
-		if (state.isPrinting) return;
-
-		set({ isPrinting: true });
-
-		const print = () => {
-			const currentState = get();
-
-			if (currentState.isStopped) {
-				set({ isPrinting: false, queue: [] });
-				return;
-			}
-
-			const next = currentState.queue[0];
-
-			if (next) {
-				const newQueue = currentState.queue.slice(1);
-
-				set({
-					queue: newQueue
-				});
-
-				get().appendToStreamingMessage(next);
-
-				setTimeout(print, get().getDelay(next));
-			} else {
-				const state = get();
-
-				set({
-					isPrinting: false
-				});
-
-				// Стрим закончился и очередь допечатана
-				if (state.isStreamFinished) {
-					set({
-						pendingUserMessage: null,
-						streamingAssistantMessage: null
-					});
-				}
-			}
-		};
-
-		print();
-	},
-
 	startStream: async (
 		message: string,
-		chatId: string
-	): Promise<string | null> => {
-		let conversationId: string | null = null;
+		chatId: string,
+		onConversationCreated?: (id: string) => void
+	): Promise<void> => {
 		const state = get();
-		function detectFileType(file: File | null) {
+		let didNavigate = false;
+
+		// Вспомогательный метод для файлов (остается твоим)
+		const detectFileType = (file: File | null) => {
 			if (!file) return;
-			// Сначала проверяем MIME тип
-			if (file.type) {
-				if (file.type.startsWith('image/')) return 'image';
-				if (file.type.startsWith('video/')) return 'video';
-				if (file.type.startsWith('audio/')) return 'audio';
-				if (
-					file.type === 'application/pdf' ||
-					file.type.includes('word') ||
-					file.type.includes('document')
-				) {
-					return 'document';
-				}
-			}
-
-			// Если MIME не помог, проверяем по расширению
-			const ext = file?.name?.split('.')?.pop()?.toLowerCase();
-			const docExts = ['pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx'];
-			if (!ext) return;
-			if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return 'image';
-			if (['mp4', 'avi', 'mov'].includes(ext)) return 'video';
-			if (['mp3', 'wav', 'ogg'].includes(ext)) return 'audio';
-			if (docExts.includes(ext)) return 'document';
-
+			if (file.type.startsWith('image/')) return 'image';
+			if (file.type.startsWith('video/')) return 'video';
+			if (file.type.startsWith('audio/')) return 'audio';
+			if (file.type.includes('pdf') || file.type.includes('word'))
+				return 'document';
 			return 'custom';
-		}
-		// Останавливаем предыдущий стрим если есть
-		if (state.controller) {
-			state.controller.abort();
-		}
+		};
 
+		// Сбрасываем прошлый контроллер, если он завис
+		state.controller?.abort();
 		const controller = new AbortController();
 
-		// Добавляем сообщение пользователя и бота
-		const userMessage: Message = {
-			id: crypto.randomUUID(),
-			role: 'user',
-			content: message
-		};
+		// Создаем уникальный локальный ID для этой пары сообщений
+		const localMessageId = crypto.randomUUID();
 
-		const botMessageId = crypto.randomUUID();
-		const botMessage: Message = {
-			id: botMessageId,
-			role: 'assistant',
-			content: '',
-			status: 'loading'
-		};
-		set({
-			pendingUserMessage: userMessage,
-			streamingAssistantMessage: botMessage
-		});
-
-		set({
+		// 1. Мгновенно добавляем локальный объект (Юзер видит свой query, Ассистент готовится стримить)
+		set((state) => ({
+			streamingMessagesByChat: {
+				...state.streamingMessagesByChat,
+				[chatId]: [
+					...(state.streamingMessagesByChat[chatId] ?? []),
+					{
+						id: localMessageId, // Локальный ID для ключа React
+						serverId: undefined, // Заполним, когда Dify пришлет message_id
+						query: message, // Текст пользователя
+						answer: '', // Будущий ответ бота (пока пустой)
+						status: 'streaming',
+						chatId
+					}
+				]
+			},
+			controller,
 			isLoading: true,
 			isBeginPrint: false,
 			isStopped: false,
-			queue: [],
-			controller,
-			activeBotMessageId: botMessageId,
-			isStreamFinished: false,
-			currentStreamingMessageId: null
-		});
+			parsedAnswer: null
+		}));
 
 		try {
 			const response = await fetch('https://api.dify.ai/v1/chat-messages', {
@@ -247,83 +169,96 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 					inputs: {},
 					user: USER_ID,
 					response_mode: 'streaming',
-					conversation_id: chatId,
-					files: [
-						{
-							type: detectFileType(state.file),
-							upload_file_id: state.uploadedFileData?.id,
-							transfer_method: 'local_file'
-						}
-					]
+					conversation_id: chatId || undefined,
+					files: state.file
+						? [
+								{
+									type: detectFileType(state.file),
+									upload_file_id: state.uploadedFileData?.id,
+									transfer_method: 'local_file'
+								}
+							]
+						: []
 				}),
 				signal: controller.signal
 			});
 
-			const reader = response.body!.getReader();
+			if (!response.body) throw new Error('Response body is null');
+			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
 			let buffer = '';
 
 			while (true) {
-				const currentState = get();
-				if (currentState.isStopped) {
+				if (get().isStopped) {
 					await reader.cancel();
 					break;
 				}
 
 				const { done, value } = await reader.read();
-
-				if (done) {
-					set({
-						isLoading: false,
-						isStreamFinished: true
-					});
-
-					break;
-				}
+				if (done) break;
 
 				buffer += decoder.decode(value, { stream: true });
 				const lines = buffer.split('\n');
 				buffer = lines.pop() || '';
 
 				for (const line of lines) {
-					const checkState = get();
-					if (checkState.isStopped) continue;
+					const cleanedLine = line.trim();
+					if (!cleanedLine.startsWith('data:')) continue;
 
-					if (line.startsWith('data:')) {
-						const json = line.replace('data: ', '').trim();
+					// Отрезаем префикс "data: "
+					const json = cleanedLine.replace(/^data:\s*/, '').trim();
 
-						try {
-							const parsed = JSON.parse(json);
-							if (parsed.conversation_id) {
-								conversationId = parsed.conversation_id;
-							}
-							set({ parsedAnswer: parsed });
+					try {
+						const parsed = JSON.parse(json);
 
-							if (parsed.event === 'workflow_started') {
-								set({ isBeginPrint: true });
-							} else if (parsed.event === 'message') {
-								if (parsed.message_id) {
-									set({
-										currentStreamingMessageId: parsed.message_id
-									});
-								}
-								set({ isBeginPrint: false });
-							}
-
-							if (parsed.answer) {
-								const currentState = get();
-								const newQueue = [...currentState.queue, parsed.answer];
-								set({
-									queue: newQueue
-								});
-								get().startPrinting();
-							}
-						} catch (e) {
-							console.error('parse error', e);
+						// Если это первый запрос в пустом чате — редиректим
+						if (parsed.conversation_id && !didNavigate && !chatId) {
+							didNavigate = true;
+							onConversationCreated?.(parsed.conversation_id);
+							chatId = parsed.conversation_id;
 						}
+
+						if (parsed.event === 'workflow_started') {
+							set({ isBeginPrint: true });
+						}
+
+						if (parsed.event === 'message') {
+							set({ isBeginPrint: false });
+						}
+
+						// 🔥 СТРИМИНГ ТЕКСТА: Находим наш локальный объект и обновляем его
+						if (parsed.answer !== undefined) {
+							set((state) => ({
+								streamingMessagesByChat: {
+									...state.streamingMessagesByChat,
+									[chatId]: (state.streamingMessagesByChat[chatId] ?? []).map(
+										(m) =>
+											m.id === localMessageId
+												? {
+														...m,
+														answer: m.answer + (parsed.answer || ''), // НАКОПЛЕНИЕ ЧАНКОВ
+														serverId: parsed.message_id || m.serverId // Сохраняем ID от Dify для фильтрации истории
+													}
+												: m
+									)
+								}
+							}));
+						}
+					} catch (e) {
+						console.error('Ошибка парсинга строки:', cleanedLine, e);
 					}
 				}
 			}
+
+			// Финализируем локальный объект
+			set((state) => ({
+				streamingMessagesByChat: {
+					...state.streamingMessagesByChat,
+					[chatId]: (state.streamingMessagesByChat[chatId] ?? []).map((m) =>
+						m.id === localMessageId ? { ...m, status: 'done' } : m
+					)
+				}
+			}));
 		} catch (error: any) {
 			if (error.name === 'AbortError') {
 				console.log('Stream aborted');
@@ -331,20 +266,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 				console.error('Stream error:', error);
 			}
 		} finally {
-			set({ isLoading: false });
+			// 🚨 Важно: Больше НЕ удаляем локальный объект через .filter()!
+			// Он будет жить в сторе, пока React Query не обновит messagesData и не скроет его по serverId === historyMsg.id
+			set({
+				isLoading: false,
+				controller: null,
+				isBeginPrint: false
+			});
 		}
-		return conversationId;
 	},
 
 	stopStream: async () => {
 		const state = get();
 
-		set({ isStopped: true, queue: [] });
+		set({ isStopped: true, isLoading: false });
 
 		if (state.controller) {
 			state.controller.abort();
 		}
-		console.log(state.parsedAnswer);
 
 		if (state.parsedAnswer?.task_id) {
 			try {
@@ -373,9 +312,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 		set({
 			controller: null,
 			isStopped: false,
-			queue: [],
-			isPrinting: false,
-			activeBotMessageId: null,
+
 			isLoading: false
 		});
 	}

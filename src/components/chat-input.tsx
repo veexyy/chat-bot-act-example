@@ -16,24 +16,23 @@ import { USER_ID } from '../constants/imports';
 import { useMutation } from '@tanstack/react-query';
 import { useChatStore } from '../core/stores/useChatStore';
 
-export const ChatInput = ({
-	sendMessage,
-	isLoading
-}: {
-	sendMessage: any;
-	isLoading: boolean;
-}) => {
+export const ChatInput = ({ sendMessage }: { sendMessage: any }) => {
 	const { inputValue, setInputValue } = useStream();
 	const { stop } = useStreamChat();
 	const inputRef = useRef<HTMLInputElement | null>(null);
-	const { file, setFile, setUploadedFileData } = useChatStore();
+	const { file, setFile, setUploadedFileData, isLoading } = useChatStore();
 
-	const handleSend = () => {
+	const handleSend = async (e: any) => {
 		if (!inputValue || isLoading) return;
 
-		sendMessage(inputValue);
-		setFile(null);
+		e.preventDefault();
+
+		const message = inputValue;
+
 		setInputValue('');
+		setFile(null);
+
+		await sendMessage(message);
 	};
 
 	const handleUploadFile = async (file: File) => {
@@ -70,12 +69,11 @@ export const ChatInput = ({
 			<Box
 				sx={{
 					display: 'flex',
-					gap: 2,
 					alignItems: 'center',
 					justifyContent: 'center',
 					width: '100%'
 				}}>
-				<Box sx={{ width: '100%', maxWidth: 700, position: 'relative' }}>
+				<Box sx={{ width: '100%', maxWidth: 800, position: 'relative' }}>
 					{file && (
 						<Box
 							sx={{
@@ -87,7 +85,7 @@ export const ChatInput = ({
 							<Box
 								sx={{
 									color: '#e3e3e3',
-									maxWidth: 200,
+									maxWidth: 300,
 									overflow: 'hidden',
 									textOverflow: 'ellipsis',
 									whiteSpace: 'nowrap',
@@ -128,7 +126,7 @@ export const ChatInput = ({
 						maxRows={8}
 						onChange={(e) => setInputValue(e.target.value)}
 						onKeyDown={(e) => {
-							if (e.key === 'Enter') handleSend();
+							if (e.key === 'Enter') handleSend(e);
 						}}
 						sx={{
 							width: '100%',
